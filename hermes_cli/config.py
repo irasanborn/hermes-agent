@@ -759,6 +759,13 @@ DEFAULT_CONFIG = {
     # Empty string means use server-local time.
     "timezone": "",
 
+    # Prepend a compact timestamp to every user message before it reaches the
+    # model.  Keeps the model temporally anchored across long or resumed sessions
+    # without touching the system prompt or busting prompt cache.
+    # Format: [Mon Apr 20 04:55 PM EDT]
+    # Timezone follows the "timezone" setting above; falls back to server-local.
+    "message_timestamp_prefix": False,
+
     # Discord platform settings (gateway mode)
     "discord": {
         "require_mention": True,       # Require @mention to respond in server channels

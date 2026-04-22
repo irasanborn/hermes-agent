@@ -1748,6 +1748,32 @@ def save_config_value(key_path: str, value: any) -> bool:
 
 
 # ============================================================================
+# Message timestamp prefix helper
+# ============================================================================
+
+def _format_message_timestamp(tz_name: str = "") -> str:
+    """Return a compact timestamp string for prefixing user messages.
+
+    Mirrors the approach in gateway/run.py (_format_inbound_message_timestamp)
+    so CLI and gateway behaviour stay in sync.  Format: [Mon Apr 20 04:55 PM EDT]
+
+    Args:
+        tz_name: IANA timezone name (e.g. "America/New_York").  Empty string
+                 or an unrecognisable name falls back to server-local time.
+    """
+    try:
+        if tz_name:
+            import zoneinfo
+            tz = zoneinfo.ZoneInfo(tz_name)
+            now = datetime.now(tz)
+        else:
+            now = datetime.now().astimezone()  # server-local with UTC offset
+    except Exception:
+        now = datetime.now().astimezone()
+    return f"[{now.strftime('%a %b %-d %I:%M %p %Z')}]"
+
+
+# ============================================================================
 # HermesCLI Class
 # ============================================================================
 
@@ -4360,6 +4386,43 @@ class HermesCLI:
         print("  Example: python cli.py --toolsets web,terminal")
         print()
     
+    def _check_session_notes_on_exit(self) -> bool:
+        """Before exiting, check if session notes are stale or missing and auto-generate them.
+
+        Returns True if exit should be deferred (notes being written), False if safe to exit.
+        """
+        import time
+        try:
+            notes_path = _hermes_home / "workspace" / "session-handoff.md"
+            stale_threshold = 20 * 60  # 20 minutes
+            needs_notes = False
+            reason = ""
+
+            if not notes_path.exists():
+                needs_notes = True
+                reason = "no session notes found"
+            else:
+                age = time.time() - notes_path.stat().st_mtime
+                if age > stale_threshold:
+                    needs_notes = True
+                    reason = f"session notes are {int(age // 60)}m old"
+
+            # Only bother if we actually did something this session
+            msg_count = len([m for m in self.conversation_history if m.get("role") == "user"])
+            if needs_notes and msg_count >= 2:
+                print(f"\n  [{reason}] Writing session notes before exit...")
+                self._exit_after_session_notes = True
+                self._pending_input.put(
+                    "Before we close out: please write updated session notes to "
+                    "/home/ira/.hermes/workspace/session-handoff.md — "
+                    "cover what we did, key decisions, open questions, and any next steps. "
+                    "Keep it tight. Don't announce it, just do it and confirm with one line."
+                )
+                return True  # defer exit
+        except Exception:
+            pass
+        return False  # safe to exit
+
     def _handle_profile_command(self):
         """Display active profile name and home directory."""
         from hermes_constants import display_hermes_home
@@ -5844,6 +5907,10 @@ class HermesCLI:
         canonical = _cmd_def.name if _cmd_def else _base_word
         
         if canonical in ("quit", "exit", "q"):
+            if self._check_session_notes_on_exit():
+                # Notes were stale — agent has been asked to write them first.
+                # _exit_after_session_notes flag will trigger exit after the next response.
+                return True  # keep session alive for one more turn
             return False
         elif canonical == "help":
             self.show_help()
@@ -8414,18 +8481,28 @@ class HermesCLI:
                 except Exception:
                     pass
                 agent_message = _voice_prefix + message if _voice_prefix else message
+                # Timestamp prefix — keeps the model temporally anchored across
+                # long or resumed sessions.  API-call-local only; the clean message
+                # is persisted via persist_user_message so history stays readable.
+                _ts_prefix = ""
+                if self.config.get("message_timestamp_prefix") and isinstance(message, str):
+                    _tz = self.config.get("timezone", "")
+                    _ts_prefix = _format_message_timestamp(_tz) + " "
                 # Prepend pending model switch note so the model knows about the switch
                 _msn = getattr(self, '_pending_model_switch_note', None)
                 if _msn:
                     agent_message = _msn + "\n\n" + agent_message
                     self._pending_model_switch_note = None
+                if _ts_prefix:
+                    agent_message = _ts_prefix + agent_message
                 try:
                     result = self.agent.run_conversation(
                         user_message=agent_message,
                         conversation_history=self.conversation_history[:-1],  # Exclude the message we just added
                         stream_callback=stream_callback,
                         task_id=self.session_id,
-                        persist_user_message=message if _voice_prefix else None,
+                        # persist_user_message keeps the clean (un-prefixed) text in history
+                        persist_user_message=message if (_voice_prefix or _ts_prefix) else None,
                     )
                 except Exception as exc:
                     logging.error("run_conversation raised: %s", exc, exc_info=True)
@@ -10529,6 +10606,13 @@ class HermesCLI:
                         if not self.process_command(user_input):
                             self._should_exit = True
                             # Schedule app exit
+                            if app.is_running:
+                                app.exit()
+
+                        # If /exit was deferred to write session notes, trigger exit now.
+                        if getattr(self, '_exit_after_session_notes', False):
+                            self._exit_after_session_notes = False
+                            self._should_exit = True
                             if app.is_running:
                                 app.exit()
                         continue
