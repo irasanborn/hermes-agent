@@ -1828,6 +1828,8 @@ class HermesCLI:
         self.bell_on_complete = CLI_CONFIG["display"].get("bell_on_complete", False)
         # show_reasoning: display model thinking/reasoning before the response
         self.show_reasoning = CLI_CONFIG["display"].get("show_reasoning", False)
+        # show_cost: show running session cost estimate in the status bar
+        self.show_cost = CLI_CONFIG["display"].get("show_cost", False)
         # busy_input_mode: "interrupt" (Enter interrupts current run) or "queue" (Enter queues for next turn)
         _bim = CLI_CONFIG["display"].get("busy_input_mode", "interrupt")
         self.busy_input_mode = "queue" if str(_bim).strip().lower() == "queue" else "interrupt"
@@ -2195,6 +2197,7 @@ class HermesCLI:
         snapshot["session_completion_tokens"] = getattr(agent, "session_completion_tokens", 0) or 0
         snapshot["session_total_tokens"] = getattr(agent, "session_total_tokens", 0) or 0
         snapshot["session_api_calls"] = getattr(agent, "session_api_calls", 0) or 0
+        snapshot["session_estimated_cost_usd"] = getattr(agent, "session_estimated_cost_usd", 0.0) or 0.0
 
         compressor = getattr(agent, "context_compressor", None)
         if compressor:
@@ -2363,6 +2366,10 @@ class HermesCLI:
             prompt_elapsed = snapshot.get("prompt_elapsed")
             if prompt_elapsed:
                 parts.append(prompt_elapsed)
+            if getattr(self, "show_cost", False):
+                cost = snapshot.get("session_estimated_cost_usd", 0.0) or 0.0
+                if cost > 0:
+                    parts.append(f"${cost:.3f}")
             return self._trim_status_bar_text(" │ ".join(parts), width)
         except Exception:
             return f"⚕ {self.model if getattr(self, 'model', None) else 'Hermes'}"
@@ -2427,6 +2434,12 @@ class HermesCLI:
                     if prompt_elapsed:
                         frags.append(("class:status-bar-dim", " │ "))
                         frags.append(("class:status-bar-dim", prompt_elapsed))
+                    # Position 8: running cost estimate (opt-in via display.show_cost)
+                    if getattr(self, "show_cost", False):
+                        cost = snapshot.get("session_estimated_cost_usd", 0.0) or 0.0
+                        if cost > 0:
+                            frags.append(("class:status-bar-dim", " │ "))
+                            frags.append(("class:status-bar-dim", f"${cost:.3f}"))
                     frags.append(("class:status-bar", " "))
 
             total_width = sum(self._status_bar_display_width(text) for _, text in frags)

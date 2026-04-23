@@ -77,7 +77,7 @@ class TestCLIStatusBar:
         assert "claude-sonnet-4-20250514" in text
         assert "12.4K/200K" in text
         assert "6%" in text
-        assert "$0.06" not in text  # cost hidden by default
+        assert "$0.06" not in text  # show_cost=False by default
         assert "15m" in text
 
     def test_input_height_counts_wide_characters_using_cell_width(self):
@@ -178,7 +178,39 @@ class TestCLIStatusBar:
         )
 
         text = cli_obj._build_status_bar_text(width=120)
-        assert "$" not in text  # cost is never shown in status bar
+        assert "$" not in text  # show_cost=False by default
+
+    def test_build_status_bar_text_shows_cost_when_enabled(self):
+        cli_obj = _attach_agent(
+            _make_cli(),
+            prompt_tokens=10000,
+            completion_tokens=5000,
+            total_tokens=15000,
+            api_calls=7,
+            context_tokens=50000,
+            context_length=200_000,
+        )
+        cli_obj.show_cost = True
+        cli_obj.agent.session_estimated_cost_usd = 0.123
+
+        text = cli_obj._build_status_bar_text(width=160)
+        assert "$0.123" in text
+
+    def test_build_status_bar_text_no_cost_shown_when_zero(self):
+        cli_obj = _attach_agent(
+            _make_cli(),
+            prompt_tokens=10000,
+            completion_tokens=5000,
+            total_tokens=15000,
+            api_calls=7,
+            context_tokens=50000,
+            context_length=200_000,
+        )
+        cli_obj.show_cost = True
+        cli_obj.agent.session_estimated_cost_usd = 0.0
+
+        text = cli_obj._build_status_bar_text(width=160)
+        assert "$" not in text  # zero cost suppressed to avoid clutter
 
     def test_build_status_bar_text_collapses_for_narrow_terminal(self):
         cli_obj = _attach_agent(
@@ -194,7 +226,7 @@ class TestCLIStatusBar:
         text = cli_obj._build_status_bar_text(width=60)
 
         assert "⚕" in text
-        assert "$0.06" not in text  # cost hidden by default
+        assert "$0.06" not in text  # show_cost=False by default
         assert "15m" in text
         assert "200K" not in text
 
