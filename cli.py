@@ -4426,8 +4426,8 @@ class HermesCLI:
                 print(f"\n  [{reason}] Writing session notes before exit...")
                 self._exit_after_session_notes = True
                 self._pending_input.put(
-                    "Before we close out: please write updated session notes to "
-                    "/home/ira/.hermes/workspace/session-handoff.md — "
+                    f"Before we close out: please write updated session notes to "
+                    f"{notes_path} — "
                     "cover what we did, key decisions, open questions, and any next steps. "
                     "Keep it tight. Don't announce it, just do it and confirm with one line."
                 )
