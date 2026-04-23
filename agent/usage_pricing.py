@@ -106,6 +106,32 @@ _OFFICIAL_DOCS_PRICING: Dict[tuple[str, str], PricingEntry] = {
         source_url="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching",
         pricing_version="anthropic-prompt-caching-2026-03-16",
     ),
+    # Short alias: claude-opus-4-6 == claude-opus-4-20250514
+    (
+        "anthropic",
+        "claude-opus-4-6",
+    ): PricingEntry(
+        input_cost_per_million=Decimal("15.00"),
+        output_cost_per_million=Decimal("75.00"),
+        cache_read_cost_per_million=Decimal("1.50"),
+        cache_write_cost_per_million=Decimal("18.75"),
+        source="official_docs_snapshot",
+        source_url="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching",
+        pricing_version="anthropic-prompt-caching-2026-03-16",
+    ),
+    # Short alias: claude-sonnet-4-6 == claude-sonnet-4-20250514
+    (
+        "anthropic",
+        "claude-sonnet-4-6",
+    ): PricingEntry(
+        input_cost_per_million=Decimal("3.00"),
+        output_cost_per_million=Decimal("15.00"),
+        cache_read_cost_per_million=Decimal("0.30"),
+        cache_write_cost_per_million=Decimal("3.75"),
+        source="official_docs_snapshot",
+        source_url="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching",
+        pricing_version="anthropic-prompt-caching-2026-03-16",
+    ),
     # OpenAI
     (
         "openai",
